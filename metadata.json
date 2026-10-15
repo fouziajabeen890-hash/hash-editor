@@ -1,0 +1,6 @@
+{
+  "name": "AI Hash Editor",
+  "description": "Advanced AI-powered code auditing, security scanning, and refactoring tool for developers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
