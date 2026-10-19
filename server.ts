@@ -1,3 +1,8 @@
+/**
+ * AI Hash Editor - Backend Core
+ * Developed and Maintained by Muhammad Ahmad Shahid
+ */
+
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
@@ -8,160 +13,146 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+const aiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
-const CANDIDATE_MODELS = [
+const PRIMARY_MODELS = [
   'gemini-3.1-flash-lite',
   'gemini-3.8-flash'
 ];
 
-async function generateWithFallback(prompt: string): Promise<string> {
-  let lastError: any = null;
+async function fetchAuditResponse(promptText: string): Promise<string> {
+  let errTrace: any = null;
 
-  for (const model of CANDIDATE_MODELS) {
-    for (let attempt = 0; attempt < 2; attempt++) {
+  for (const modelName of PRIMARY_MODELS) {
+    for (let tryCount = 0; tryCount < 2; tryCount++) {
       try {
-        console.log(`[AI Hash Editor] Querying model ${model} (attempt ${attempt + 1})...`);
-        const result = await genAI.models.generateContent({
-          model,
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        console.log(`[AuditEngine] Dispatching request to model -> ${modelName} (try ${tryCount + 1})`);
+        const response = await aiClient.models.generateContent({
+          model: modelName,
+          contents: [{ role: 'user', parts: [{ text: promptText }] }],
         });
 
-        let text = "";
-        if (result && result.candidates && result.candidates.length > 0) {
-          text = result.candidates[0].content?.parts?.[0]?.text || "";
-        }
-
-        if (text && text.trim().length > 0) {
-          return text;
+        const outputText = response?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (outputText && outputText.trim().length > 0) {
+          return outputText;
         }
       } catch (err: any) {
-        lastError = err;
-        console.warn(`[AI Hash Editor] Model ${model} attempt ${attempt + 1} failed:`, err.message || err);
+        errTrace = err;
+        console.warn(`[AuditEngine] Warning on ${modelName}:`, err.message || err);
 
-        // Check if temporary demand / rate limit / 503
-        const isTemporary = 
+        const isBusy = 
           err.status === 'UNAVAILABLE' || 
           err.code === 503 || 
           (err.message && (err.message.includes('high demand') || err.message.includes('503') || err.message.includes('ResourceExhausted')));
 
-        if (isTemporary && attempt === 0) {
-          await new Promise((resolve) => setTimeout(resolve, 1500));
+        if (isBusy && tryCount === 0) {
+          await new Promise((res) => setTimeout(res, 1200));
         } else {
-          // Switch to next model immediately
           break;
         }
       }
     }
   }
 
-  throw lastError || new Error('All AI models are currently unavailable. Please try again.');
+  throw errTrace || new Error('All analysis models are currently busy. Please try again.');
 }
 
 app.post('/api/analyze', async (req, res) => {
   const { code, mode = 'deep_research' } = req.body;
   if (!code || typeof code !== 'string' || !code.trim()) {
-    return res.status(400).json({ error: 'Please provide some code to analyze.' });
+    return res.status(400).json({ error: 'Please provide valid source code for inspection.' });
   }
 
   try {
-    const isDeep = mode === 'deep_research';
-    const prompt = `You are a Principal Security Research Architect and Elite Autonomous Code Analyst conducting a ${isDeep ? 'COMPREHENSIVE DEEP RESEARCH INVESTIGATION' : 'STANDARD CODE AUDIT'}.
-Perform an exhaustive multi-vector audit of the following source code:
-1. Attack Surface & Threat Modeling (Simulate potential hacker exploit scenarios).
-2. Root Cause Analysis (Deep mechanical explanation of architectural flaws).
-3. Logic, Memory, Concurrency, and Runtime Flaws (Race conditions, leaks, edge cases).
-4. Compliance & Regulatory Violations (OWASP, CWE, PCI-DSS, GDPR, Zero-Trust principles).
-5. Production Hardening (Clean, elegant, refactored, production-ready solution).
+    const isDeepScan = mode === 'deep_research';
+    const auditPrompt = `You are a Principal Security Architect and Expert Code Reviewer conducting a ${isDeepScan ? 'DEEP SOURCE CODE INVESTIGATION' : 'STATIC CODE SCAN'}.
+Perform an exhaustive, professional code review covering:
+1. Security Vulnerabilities & Injection Risks (OWASP Top 10, CWE).
+2. Logic, Syntax & Runtime Exceptions (Null refs, unhandled promises, race conditions).
+3. Performance Bottlenecks & Memory Leaks.
+4. Clean Architecture & Best Practices.
 
-Source Code under Investigation:
+Target Code:
 ${code}
 
-Respond ONLY with a valid, clean JSON object. Do not include markdown codeblocks or conversational text.
+Provide all text, summaries, diagnoses, attack vectors, and remediation steps strictly in professional English.
+Respond strictly with a valid JSON object only (no markdown, no backticks, no chat text):
 {
     "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "CLEAN",
     "threatScore": 85,
-    "summary": "Direct, authoritative executive summary detailing all critical failures found in the code.",
-    "rootCauseAnalysis": "In-depth technical explanation of why this flaw occurs at the memory/runtime/architectural level.",
+    "exactMistakeFound": "Detailed explanation of what specific mistake or flaw was present in the user's code (Yeh galti thi code mein).",
+    "summary": "Clear, direct professional diagnosis explaining the core errors.",
+    "rootCauseAnalysis": "Technical breakdown of why this issue occurs.",
     "attackVectors": [
         {
-            "name": "e.g. Unauthenticated Remote SQL Injection (CWE-89)",
-            "impact": "e.g. Total Database Compromise / Authentication Bypass",
-            "scenario": "Step-by-step explanation of how an adversary would trigger or exploit this in production."
+            "name": "Vulnerability or Exploit Name",
+            "impact": "Potential system compromise impact",
+            "scenario": "How an adversary could trigger this issue."
         }
     ],
     "howToFix": [
-        "Definitive step-by-step instructions to remediate and harden the implementation"
+        "Step-by-step instructions to remediate the flaw"
     ],
     "bugs": [
-        "Specific logic, syntax, or runtime bugs identified with root cause"
+        "Specific logic or runtime bugs found with professional explanation"
     ],
     "vulnerabilities": [
-        "Specific security vulnerabilities classified by CWE / OWASP"
+        "Identified security vulnerabilities with CWE classification"
     ],
     "complianceImpact": [
-        "e.g. PCI-DSS Requirement 6.5.1 violation",
-        "OWASP A03:2021-Injection violation"
+        "Relevant security standards violated (e.g. OWASP A03)"
     ],
-    "fixedCode": "Complete, production-ready, refactored, hardened, and clean source code"
+    "fixedCode": "Fully corrected, production-ready, clean source code"
 }`;
 
-    const text = await generateWithFallback(prompt);
+    const rawAIResponse = await fetchAuditResponse(auditPrompt);
 
-    // Clean markdown code blocks if the model wrapped it in ```json ... ```
-    let cleanedText = text.trim();
-    if (cleanedText.startsWith('```json')) {
-      cleanedText = cleanedText.replace(/^```json/, '').replace(/```$/, '').trim();
-    } else if (cleanedText.startsWith('```')) {
-      cleanedText = cleanedText.replace(/^```/, '').replace(/```$/, '').trim();
+    let cleanedJsonString = rawAIResponse.trim();
+    if (cleanedJsonString.startsWith('```json')) {
+      cleanedJsonString = cleanedJsonString.replace(/^```json/, '').replace(/```$/, '').trim();
+    } else if (cleanedJsonString.startsWith('```')) {
+      cleanedJsonString = cleanedJsonString.replace(/^```/, '').replace(/```$/, '').trim();
     }
 
-    const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+    const jsonMatch = cleanedJsonString.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error('[AI Hash Editor] Raw response text:', text);
-      throw new Error('Could not parse structured audit report from AI response.');
+      console.error('[AuditEngine] Malformed JSON output:', rawAIResponse);
+      throw new Error('Failed to parse structured audit payload from model response.');
     }
 
-    const parsedData = JSON.parse(jsonMatch[0]);
+    const payload = JSON.parse(jsonMatch[0]);
 
-    // Ensure array structures and defaults
-    if (!Array.isArray(parsedData.howToFix)) parsedData.howToFix = [];
-    if (!Array.isArray(parsedData.bugs)) parsedData.bugs = [];
-    if (!Array.isArray(parsedData.vulnerabilities)) parsedData.vulnerabilities = [];
-    if (!Array.isArray(parsedData.attackVectors)) parsedData.attackVectors = [];
-    if (!Array.isArray(parsedData.complianceImpact)) parsedData.complianceImpact = [];
-    if (!parsedData.summary) parsedData.summary = "Deep code investigation completed.";
-    if (!parsedData.severity) parsedData.severity = "MEDIUM";
-    if (typeof parsedData.threatScore !== 'number') parsedData.threatScore = 70;
-    if (!parsedData.rootCauseAnalysis) parsedData.rootCauseAnalysis = "Architectural review identified security and logic deficiencies.";
-    if (!parsedData.fixedCode) parsedData.fixedCode = code;
+    // Safety defaults
+    if (!Array.isArray(payload.howToFix)) payload.howToFix = [];
+    if (!Array.isArray(payload.bugs)) payload.bugs = [];
+    if (!Array.isArray(payload.vulnerabilities)) payload.vulnerabilities = [];
+    if (!Array.isArray(payload.attackVectors)) payload.attackVectors = [];
+    if (!Array.isArray(payload.complianceImpact)) payload.complianceImpact = [];
+    if (!payload.exactMistakeFound) payload.exactMistakeFound = "A structural flaw or security vulnerability was detected in the submitted code snippet.";
+    if (!payload.summary) payload.summary = "Code audit completed successfully.";
+    if (!payload.severity) payload.severity = "MEDIUM";
+    if (typeof payload.threatScore !== 'number') payload.threatScore = 70;
+    if (!payload.rootCauseAnalysis) payload.rootCauseAnalysis = "Standard architectural review completed.";
+    if (!payload.fixedCode) payload.fixedCode = code;
 
-    res.json(parsedData);
-  } catch (error: any) {
-    console.error('[AI Hash Editor] Analysis endpoint error:', error);
-    res.status(500).json({ error: error.message || 'Analysis failed. Please try again.' });
+    res.json(payload);
+  } catch (err: any) {
+    console.error('[AuditEngine] Endpoint error:', err);
+    res.status(500).json({ error: err.message || 'Audit execution failed. Please retry.' });
   }
 });
 
-async function startServer() {
-  const vite = await createViteServer({
+async function initializeApp() {
+  const viteServer = await createViteServer({
     server: { middlewareMode: true },
     appType: 'spa',
   });
 
-  app.use(vite.middlewares);
+  app.use(viteServer.middlewares);
 
-  const server = app.listen(3000, () => {
-    console.log('Server running on http://localhost:3000');
-  });
-
-  server.on('error', (e: any) => {
-    if (e.code === 'EADDRINUSE') {
-      console.log('Port 3000 is busy, another server might be running.');
-    } else {
-      console.error(e);
-    }
+  app.listen(3000, () => {
+    console.log('[Server] AI Hash Editor running smoothly at http://localhost:3000');
   });
 }
 
-startServer();
+initializeApp();

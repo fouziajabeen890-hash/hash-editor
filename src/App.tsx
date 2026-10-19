@@ -1,7 +1,12 @@
+/**
+ * AI Hash Editor Pro - Main Client Application
+ * Architect & Developer: Muhammad Ahmad Shahid
+ */
+
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
-  ShieldAlert, 
+  Shield, 
   Code2, 
   CheckCircle2, 
   Loader2, 
@@ -13,638 +18,425 @@ import {
   Sparkles, 
   RefreshCw, 
   Cpu, 
-  Zap, 
-  Crosshair, 
   FileCheck, 
-  ExternalLink,
-  ChevronRight,
-  Fingerprint
+  Fingerprint,
+  Terminal
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { MatrixBackground } from './components/MatrixBackground';
 
-const SAMPLES = {
-  sqli: `// Critical Auth & Injection Threat
-function handleLogin(req, res) {
-  const username = req.body.username;
-  const password = req.body.password;
+const SAMPLE_PRESETS = {
+  sqli: `// Critical Authentication & SQL Injection Threat
+function authenticateUser(req, res) {
+  const accountUser = req.body.username;
+  const accountPass = req.body.password;
 
-  // Vulnerability: Critical SQL Injection flaw
-  const sql = "SELECT * FROM users WHERE user = '" + username + "' AND pass = '" + password + "'";
-  database.execute(sql, (err, rows) => {
-    if (rows && rows.length > 0) {
-      // Logic flaw: Token with static secret and infinite lifetime
-      const token = jwt.sign({ uid: rows[0].id, role: rows[0].role }, "admin_secret_999");
-      res.json({ authorized: true, token: token });
+  const sqlQuery = "SELECT * FROM users WHERE username = '" + accountUser + "' AND password = '" + accountPass + "'";
+  dbConnection.query(sqlQuery, (err, results) => {
+    if (results && results.length > 0) {
+      const sessionToken = jwt.sign({ userId: results[0].id }, "hardcoded_secret_key_123");
+      res.json({ success: true, token: sessionToken });
     } else {
-      res.status(401).json({ error: "Invalid credentials" });
+      res.status(401).json({ error: "Unauthorized access" });
     }
   });
 }`,
   memory_leak: `// Concurrency & Memory Leak Hazard
-class DataStreamManager {
+class ConnectionStreamHandler {
   constructor() {
-    this.subscribers = [];
+    this.activeListeners = [];
   }
 
-  attachListener(stream) {
-    // Memory Leak: Unbounded closures retaining socket memory
-    stream.on('data', (chunk) => {
-      this.subscribers.push({
+  registerStream(streamSocket) {
+    streamSocket.on('data', (payloadChunk) => {
+      this.activeListeners.push({
         timestamp: Date.now(),
-        buffer: chunk,
-        session: stream.session
+        data: payloadChunk,
+        meta: streamSocket.metadata
       });
     });
   }
 
-  // Race condition: unsynchronized state alteration
-  async flush(targetDb) {
-    for (let item of this.subscribers) {
-      await targetDb.insert(item);
+  async persistBatch(targetStore) {
+    for (const entry of this.activeListeners) {
+      await targetStore.save(entry);
     }
-    this.subscribers = [];
+    this.activeListeners = [];
   }
 }`
 };
 
-const RESEARCH_STAGES = [
-  'Deconstructing Abstract Syntax Tree (AST) & Call Graphs...',
+const ANALYSIS_STEPS = [
+  'Parsing Abstract Syntax Tree & Call Graphs...',
   'Executing Dynamic Taint Tracking & Exploit Surface Modeling...',
-  'Cross-Referencing Global CVE, CWE & OWASP Top 10 Vectors...',
+  'Cross-Referencing Global CVE, CWE & OWASP Top 10 Threat Vectors...',
   'Evaluating Concurrency Deadlocks, Memory Leaks & Race Hazards...',
   'Synthesizing Zero-Trust Remediated Production Patch...'
 ];
 
 export default function App() {
-  const [code, setCode] = useState('');
-  const [mode, setMode] = useState<'deep_research' | 'standard'>('deep_research');
-  const [loading, setLoading] = useState(false);
-  const [stageIndex, setStageIndex] = useState(0);
+  const [sourceCode, setSourceCode] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
   const [activeTab, setActiveTab] = useState<'overview' | 'vectors' | 'remediation' | 'patch'>('overview');
-  const [result, setResult] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [auditResult, setAuditResult] = useState<any>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
 
-  // Animate stages while scanning
   useEffect(() => {
-    if (!loading) {
-      setStageIndex(0);
+    if (!isAnalyzing) {
+      setCurrentStep(0);
       return;
     }
-    const interval = setInterval(() => {
-      setStageIndex((prev) => (prev + 1) % RESEARCH_STAGES.length);
-    }, 1800);
-    return () => clearInterval(interval);
-  }, [loading]);
+    const timer = setInterval(() => {
+      setCurrentStep((prev) => (prev + 1) % ANALYSIS_STEPS.length);
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [isAnalyzing]);
 
-  const runDeepResearch = async () => {
-    if (!code.trim()) {
-      setError('Please input or load source code before initiating research.');
+  const executeAudit = async () => {
+    if (!sourceCode.trim()) {
+      setErrorMessage('Please provide valid source code before initiating the security audit.');
       return;
     }
-    setLoading(true);
-    setError(null);
+    setIsAnalyzing(true);
+    setErrorMessage(null);
     try {
-      const response = await axios.post('/api/analyze', { code, mode });
-      setResult(response.data);
+      const response = await axios.post('/api/analyze', { code: sourceCode, mode: 'deep_research' });
+      setAuditResult(response.data);
       setActiveTab('overview');
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Deep Research pipeline encountered a disruption. Please retry.');
+      setErrorMessage(err.response?.data?.error || err.message || 'Audit pipeline encountered an error. Please try again.');
     } finally {
-      setLoading(false);
+      setIsAnalyzing(false);
     }
   };
 
-  const handleCopyCode = () => {
-    if (!result?.fixedCode) return;
-    navigator.clipboard.writeText(result.fixedCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyRefactoredCode = () => {
+    if (!auditResult?.fixedCode) return;
+    navigator.clipboard.writeText(auditResult.fixedCode);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const downloadDossier = () => {
-    if (!result) return;
-    const vectorsText = (result.attackVectors || [])
-      .map((v: any, i: number) => `### Attack Vector ${i + 1}: ${v.name}\n- Impact: ${v.impact}\n- Exploitation Scenario: ${v.scenario}`)
+  const exportMarkdownDossier = () => {
+    if (!auditResult) return;
+    const vectorsMarkdown = (auditResult.attackVectors || [])
+      .map((v: any, i: number) => `### Attack Vector ${i + 1}: ${v.name}\n- **Impact:** ${v.impact}\n- **Scenario:** ${v.scenario}`)
       .join('\n\n');
 
-    const fixesText = (result.howToFix || [])
+    const fixesMarkdown = (auditResult.howToFix || [])
       .map((step: string, i: number) => `${i + 1}. ${step}`)
       .join('\n');
 
-    const bugsText = (result.bugs || []).map((b: string) => `- ${b}`).join('\n');
-    const vulnsText = (result.vulnerabilities || []).map((v: string) => `- ${v}`).join('\n');
-
-    const dossier = `# DEEP RESEARCH SECURITY AUDIT DOSSIER
-**System:** AI Hash Editor (v2.5 Autonomous Deep Research Edition)  
+    const dossierContent = `# SECURITY AUDIT & REMEDIATION DOSSIER
+**Platform:** AI Hash Editor Pro  
 **Lead Security Architect:** Muhammad Ahmad Shahid  
-**Investigation Timestamp:** ${new Date().toUTCString()}  
-**Threat Score:** ${result.threatScore || 85}/100 [SEVERITY: ${result.severity || 'CRITICAL'}]  
+**Timestamp:** ${new Date().toUTCString()}  
+**Threat Risk Score:** ${auditResult.threatScore || 85}/100 [SEVERITY: ${auditResult.severity || 'CRITICAL'}]  
 
 ---
 
-## 1. EXECUTIVE DIAGNOSIS (YEH ERROR HAI CODE MEIN)
-${result.summary || 'Exhaustive security audit completed.'}
+## 1. EXACT MISTAKE IDENTIFIED IN SOURCE CODE
+${auditResult.exactMistakeFound || auditResult.summary}
 
-### Root Cause Analysis (RCA):
-${result.rootCauseAnalysis || 'Semantic structural vulnerability detected.'}
-
----
-
-## 2. ATTACK VECTORS & EXPLOIT SIMULATIONS
-${vectorsText || 'No direct critical exploit vectors synthesized.'}
+## 2. EXECUTIVE DIAGNOSIS
+${auditResult.summary || 'Exhaustive security audit completed.'}
 
 ---
 
-## 3. REMEDIATION BLUEPRINT (AISE THEEK KAREIN)
-${fixesText || 'Follow clean code and safe parameterization standards.'}
+## 3. ATTACK VECTORS & EXPLOIT SIMULATIONS
+${vectorsMarkdown || 'No direct critical exploit vectors synthesized.'}
 
 ---
 
-## 4. DETECTED BUGS & LOGIC HAZARDS
-${bugsText || 'No logic bugs found.'}
-
-## 5. CVE & SECURITY VULNERABILITIES
-${vulnsText || 'No direct CVE vulnerabilities mapped.'}
+## 4. REMEDIATION BLUEPRINT & STEP-BY-STEP FIXES
+${fixesMarkdown || 'Follow clean code and safe parameterization standards.'}
 
 ---
 
-## 6. HARDENED PRODUCTION PATCH (DROPPED-IN FIX)
-\`\`\`
-${result.fixedCode}
+## 5. HARDENED PRODUCTION PATCH
+\`\`\`typescript
+${auditResult.fixedCode}
 \`\`\`
 
 ---
-*Signed & Certified by Muhammad Ahmad Shahid*
+*Verified & Certified by Muhammad Ahmad Shahid*
 `;
 
-    const blob = new Blob([dossier], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `deep-research-dossier-${Date.now()}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const fileBlob = new Blob([dossierContent], { type: 'text/markdown;charset=utf-8' });
+      const fileUrl = URL.createObjectURL(fileBlob);
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.href = fileUrl;
+      downloadAnchor.download = `security-dossier-${Date.now()}.md`;
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      document.body.removeChild(downloadAnchor);
+      setTimeout(() => URL.revokeObjectURL(fileUrl), 1000);
+    } catch (e) {
+      console.error('Download failed:', e);
+      alert('Failed to download report file. Please copy the code/report manually.');
+    }
   };
 
   return (
-    <div className="min-h-screen bg-[#07090e] text-slate-200 font-sans selection:bg-cyan-500 selection:text-black">
-      {/* Top Professional Header */}
-      <header className="border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-xl sticky top-0 z-30 px-4 md:px-10 py-4">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="p-2.5 bg-gradient-to-br from-cyan-500/20 to-blue-600/10 rounded-2xl border border-cyan-500/30 text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.15)]">
-              <Cpu className="w-7 h-7" />
+    <div className="min-h-screen bg-[#04060A] text-slate-100 font-sans selection:bg-cyan-500 selection:text-black pb-24 relative overflow-x-hidden">
+      
+      {/* Matrix Background Animation */}
+      <MatrixBackground />
+
+      {/* Responsive Header */}
+      <header className="border-b border-slate-800/80 bg-[#04060A]/95 backdrop-blur-2xl sticky top-0 z-40 px-4 sm:px-8 md:px-16 py-4 shadow-2xl">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-[#080d1a] border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-inner">
+                <Shield className="w-5 h-5 text-cyan-400" />
+              </div>
             </div>
             <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight flex items-center gap-2">
-                  AI Hash Editor
-                  <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/60">
-                    Deep Research
-                  </span>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight bg-gradient-to-r from-white via-cyan-100 to-cyan-400 bg-clip-text text-transparent">
+                  AI Hash Editor <span className="text-cyan-400 font-light">Pro</span>
                 </h1>
               </div>
-              <p className="text-xs text-slate-400">Autonomous AST Deconstruction, Attack Simulation & Patch Synthesis</p>
+              <p className="text-[11px] sm:text-xs text-slate-400 font-medium">Autonomous Code Auditor & Security Suite</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-right hidden sm:block">
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Principal Investigator</p>
-              <p className="text-sm font-bold text-cyan-300">Muhammad Ahmad Shahid</p>
-            </div>
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-cyan-600 via-indigo-600 to-purple-600 flex items-center justify-center font-black text-white shadow-lg text-sm border border-cyan-400/30">
+          <div className="flex items-center gap-2.5 bg-slate-900/60 px-3.5 py-2 rounded-2xl border border-slate-800 shadow-md">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-bold text-white text-xs">
               AS
+            </div>
+            <div className="text-left">
+              <p className="text-[9px] text-slate-400 uppercase font-extrabold">Lead Architect</p>
+              <p className="text-xs font-black text-cyan-300">Muhammad Ahmad Shahid</p>
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto p-4 md:p-10 space-y-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-8 md:px-16 pt-6 sm:pt-8 space-y-6 sm:space-y-8 relative z-10">
         
-        {/* Research Configuration Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/40 p-3.5 rounded-2xl border border-slate-800/80">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-400 px-2">Investigation Mode:</span>
-            <button
-              onClick={() => setMode('deep_research')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                mode === 'deep_research'
-                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Fingerprint className="w-3.5 h-3.5" />
-              Autonomous Deep Research
-            </button>
-            <button
-              onClick={() => setMode('standard')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                mode === 'standard'
-                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5" />
-              Rapid Static Scan
-            </button>
+        {/* Quick Sample Presets */}
+        <div className="flex items-center justify-between flex-wrap gap-3 bg-slate-900/40 px-4 sm:px-6 py-3.5 rounded-3xl border border-slate-800/80 backdrop-blur-md shadow-xl">
+          <div className="flex items-center gap-2 text-xs text-slate-300 font-bold">
+            <Sparkles className="w-4 h-4 text-cyan-400" />
+            <span className="hidden sm:inline">Load Sample:</span>
+            <span className="sm:hidden">Samples:</span>
           </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 hidden sm:inline">Load Preset Threat:</span>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
-              onClick={() => {
-                setCode(SAMPLES.sqli);
-                setError(null);
-              }}
-              className="text-xs flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800/70 hover:bg-slate-700 text-slate-300 transition-colors border border-slate-700/60"
+              onClick={() => { setSourceCode(SAMPLE_PRESETS.sqli); setErrorMessage(null); }}
+              className="flex-1 sm:flex-none px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs font-bold text-cyan-300 border border-slate-700 transition-all cursor-pointer shadow-sm"
             >
-              <Sparkles className="w-3 h-3 text-cyan-400" />
-              SQLi & Auth Bypass
+              SQL Injection
             </button>
             <button
-              onClick={() => {
-                setCode(SAMPLES.memory_leak);
-                setError(null);
-              }}
-              className="text-xs flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800/70 hover:bg-slate-700 text-slate-300 transition-colors border border-slate-700/60"
+              onClick={() => { setSourceCode(SAMPLE_PRESETS.memory_leak); setErrorMessage(null); }}
+              className="flex-1 sm:flex-none px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs font-bold text-indigo-300 border border-slate-700 transition-all cursor-pointer shadow-sm"
             >
-              <Crosshair className="w-3 h-3 text-indigo-400" />
-              Memory Leak & Concurrency
+              Memory Leak
             </button>
           </div>
         </div>
 
-        {/* Workspace Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Two-Column Responsive Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           
-          {/* Left Column: Input Terminal */}
-          <div className="lg:col-span-5 space-y-4">
-            <div className="bg-slate-900/60 rounded-3xl border border-slate-800/80 p-5 shadow-2xl backdrop-blur-md">
-              <div className="flex items-center justify-between mb-3.5">
-                <div className="flex items-center gap-2 text-white font-bold text-sm">
-                  <Code2 className="w-4 h-4 text-cyan-400" />
-                  <span>Source Terminal</span>
-                </div>
-                <span className="text-[11px] text-slate-500 font-mono">UTF-8 / Multi-Lang</span>
-              </div>
-
-              <textarea 
-                className="w-full h-[520px] bg-slate-950/90 p-4 rounded-2xl text-xs md:text-sm font-mono border border-slate-800/90 focus:border-cyan-500/80 outline-none transition-all resize-none shadow-inner text-slate-200 placeholder-slate-700 leading-relaxed focus:ring-1 focus:ring-cyan-500/40"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="// Enter or paste your target source code snippet here...&#10;// AI Hash Editor Deep Research scans for all vulnerabilities, runtime bugs, and architectural flaws."
-              />
-
-              <button 
-                onClick={runDeepResearch}
-                disabled={loading}
-                className="mt-4 w-full bg-gradient-to-r from-cyan-500 via-teal-400 to-cyan-400 hover:from-cyan-400 hover:to-teal-300 text-slate-950 font-black py-4 rounded-2xl transition-all shadow-[0_0_25px_rgba(6,182,212,0.25)] flex justify-center items-center gap-3 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed uppercase tracking-wider text-xs"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="animate-spin w-4 h-4 text-black" />
-                    <span>Executing Deep Research Investigation...</span>
-                  </>
-                ) : (
-                  <>
-                    <Fingerprint className="w-4 h-4 text-black" />
-                    <span>Initiate Autonomous Deep Research</span>
-                  </>
-                )}
-              </button>
+          {/* Left Column: Code Editor */}
+          <div className="lg:col-span-5 bg-slate-900/50 rounded-3xl border border-slate-800/90 p-4 sm:p-6 backdrop-blur-xl shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-cyan-400" /> Source Editor
+              </span>
+              <span className="text-[11px] font-mono text-cyan-400/80 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/40">UTF-8</span>
             </div>
+
+            <textarea 
+              className="w-full h-[400px] sm:h-[480px] bg-[#020305] p-4 sm:p-5 rounded-2xl text-xs sm:text-sm font-mono border border-slate-800 focus:border-cyan-500 outline-none transition-all resize-none text-slate-200 placeholder-slate-600 leading-relaxed shadow-inner"
+              value={sourceCode}
+              onChange={(e) => setSourceCode(e.target.value)}
+              placeholder="// Paste your source code here..."
+            />
+
+            <button 
+              onClick={executeAudit}
+              disabled={isAnalyzing}
+              className="w-full bg-gradient-to-r from-cyan-500 via-teal-400 to-cyan-400 hover:from-cyan-400 hover:to-teal-300 text-slate-950 font-black py-3.5 sm:py-4 rounded-2xl transition-all shadow-[0_0_25px_rgba(6,182,212,0.25)] flex justify-center items-center gap-2 disabled:opacity-50 cursor-pointer text-xs uppercase tracking-widest"
+            >
+              {isAnalyzing ? (
+                <>
+                  <Loader2 className="animate-spin w-4 h-4 text-black" />
+                  <span>Auditing...</span>
+                </>
+              ) : (
+                <>
+                  <Fingerprint className="w-4 h-4 text-black" />
+                  <span>Run Audit</span>
+                </>
+              )}
+            </button>
           </div>
 
-          {/* Right Column: Research Dossier / Pipeline Output */}
+          {/* Right Column: Output Dossier */}
           <div className="lg:col-span-7 space-y-6">
             
-            {/* Error Notification */}
-            {error && (
-              <motion.div 
-                initial={{ opacity: 0, y: -10 }} 
-                animate={{ opacity: 1, y: 0 }} 
-                className="bg-red-950/40 border border-red-800/60 p-5 rounded-3xl text-red-300 flex items-start gap-3.5 shadow-2xl"
-              >
+            {errorMessage && (
+              <div className="bg-red-950/40 border border-red-800/80 p-4 sm:p-5 rounded-3xl text-red-300 flex items-start gap-3 shadow-xl backdrop-blur-md">
                 <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-bold text-red-200 text-sm">Research Pipeline Alert</p>
-                  <p className="text-xs text-red-300/90 mt-1">{error}</p>
-                  <button 
-                    onClick={runDeepResearch} 
-                    className="mt-3 flex items-center gap-1.5 text-xs font-bold text-red-200 bg-red-900/40 hover:bg-red-900/70 border border-red-700/60 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" /> Re-trigger Pipeline
-                  </button>
-                </div>
-              </motion.div>
+                <p className="text-xs leading-relaxed font-medium">{errorMessage}</p>
+              </div>
             )}
 
-            {/* Live Deep Research Scanning State */}
-            {loading && (
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-slate-900/60 border border-cyan-500/30 rounded-3xl p-8 backdrop-blur-xl shadow-2xl space-y-6"
-              >
-                <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <div className="w-3 h-3 rounded-full bg-cyan-400 animate-ping absolute inset-0" />
-                      <div className="w-3 h-3 rounded-full bg-cyan-500 relative" />
-                    </div>
-                    <span className="text-sm font-bold text-white tracking-wide">Deep Research Autonomous Pipeline Active</span>
-                  </div>
-                  <span className="text-xs font-mono text-cyan-400 font-bold">STAGE {stageIndex + 1} / 5</span>
+            {isAnalyzing && (
+              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 sm:p-12 text-center space-y-6 min-h-[400px] sm:min-h-[500px] flex flex-col items-center justify-center backdrop-blur-xl shadow-2xl">
+                <div className="w-14 h-14 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
+                  <Loader2 className="w-7 h-7 text-cyan-400 animate-spin" />
                 </div>
-
-                <div className="space-y-3">
-                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Current Pipeline Operation:</p>
-                  <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 font-mono text-xs text-cyan-300 flex items-center gap-3">
-                    <Loader2 className="w-4 h-4 animate-spin text-cyan-400 shrink-0" />
-                    <span className="animate-pulse">{RESEARCH_STAGES[stageIndex]}</span>
-                  </div>
-                </div>
-
-                {/* Progressive Pipeline Step Display */}
-                <div className="space-y-2 pt-2">
-                  {RESEARCH_STAGES.map((stage, idx) => (
-                    <div key={idx} className="flex items-center gap-3 text-xs">
-                      {idx < stageIndex ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                      ) : idx === stageIndex ? (
-                        <Loader2 className="w-4 h-4 text-cyan-400 animate-spin shrink-0" />
-                      ) : (
-                        <div className="w-4 h-4 rounded-full border border-slate-700 shrink-0" />
-                      )}
-                      <span className={idx <= stageIndex ? 'text-slate-200' : 'text-slate-600'}>
-                        {stage}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-
-            {/* Idle State */}
-            {!loading && !result && !error && (
-              <div className="bg-slate-900/30 border border-slate-800/80 rounded-3xl p-10 text-center flex flex-col items-center justify-center min-h-[580px]">
-                <div className="p-4 bg-slate-900/80 rounded-2xl border border-slate-800 mb-4 text-cyan-400 shadow-inner">
-                  <Fingerprint className="w-12 h-12" />
-                </div>
-                <h3 className="text-lg font-bold text-white mb-2">Deep Research Engine Ready</h3>
-                <p className="text-xs text-slate-400 max-w-md leading-relaxed mb-6">
-                  Paste your target snippet and click "Initiate Autonomous Deep Research". The system executes multi-vector taint tracking, simulates attacker exploit scenarios, and generates a zero-trust hardened patch.
-                </p>
-                <div className="flex gap-2.5">
-                  <button
-                    onClick={() => {
-                      setCode(SAMPLES.sqli);
-                      setError(null);
-                    }}
-                    className="text-xs text-cyan-300 hover:text-white border border-cyan-800/50 bg-cyan-950/40 px-3.5 py-2 rounded-xl transition-all cursor-pointer font-medium"
-                  >
-                    Load Sample SQLi
-                  </button>
-                  <button
-                    onClick={() => {
-                      setCode(SAMPLES.memory_leak);
-                      setError(null);
-                    }}
-                    className="text-xs text-indigo-300 hover:text-white border border-indigo-800/50 bg-indigo-950/40 px-3.5 py-2 rounded-xl transition-all cursor-pointer font-medium"
-                  >
-                    Load Sample Concurrency Bug
-                  </button>
+                <div className="space-y-2 max-w-sm">
+                  <p className="text-xs font-black text-white uppercase tracking-widest">Pipeline Active</p>
+                  <p className="text-xs font-mono text-cyan-300 animate-pulse">{ANALYSIS_STEPS[currentStep]}</p>
                 </div>
               </div>
             )}
 
-            {/* Completed Deep Research Dossier */}
-            {!loading && result && (
-              <motion.div 
-                initial={{ opacity: 0, y: 15 }} 
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-slate-900/60 border border-slate-800/90 rounded-3xl p-6 md:p-8 backdrop-blur-xl shadow-2xl space-y-6"
-              >
-                {/* Dossier Header Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-5">
+            {!isAnalyzing && !auditResult && !errorMessage && (
+              <div className="bg-slate-900/30 border border-slate-800/80 rounded-3xl p-8 sm:p-12 text-center text-slate-400 min-h-[400px] sm:min-h-[500px] flex flex-col items-center justify-center backdrop-blur-md shadow-xl">
+                <div className="w-12 h-12 rounded-2xl bg-slate-800/60 border border-slate-700/60 flex items-center justify-center text-cyan-400 mb-3 shadow-inner">
+                  <Terminal className="w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-bold text-white mb-1">Audit Engine Standby</h3>
+                <p className="text-xs text-slate-400 max-w-sm leading-relaxed">Enter your source code or load a sample on the left to generate the security report.</p>
+              </div>
+            )}
+
+            {!isAnalyzing && auditResult && (
+              <div className="bg-slate-900/60 border border-slate-800/90 rounded-3xl p-5 sm:p-8 shadow-2xl space-y-6 backdrop-blur-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-2xl border border-emerald-500/20">
-                      <FileCheck className="w-6 h-6" />
+                    <div className="w-9 h-9 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                      <FileCheck className="w-5 h-5" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h2 className="text-xl font-black text-white">Security Research Dossier</h2>
+                        <h2 className="text-xs sm:text-sm font-black text-white uppercase tracking-wider">Audit Report</h2>
                         <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
-                          result.severity === 'CRITICAL' ? 'bg-red-950 text-red-400 border-red-700/60' :
-                          result.severity === 'HIGH' ? 'bg-orange-950 text-orange-400 border-orange-700/60' :
-                          result.severity === 'MEDIUM' ? 'bg-yellow-950 text-yellow-400 border-yellow-700/60' :
-                          'bg-emerald-950 text-emerald-400 border-emerald-700/60'
+                          auditResult.severity === 'CRITICAL' ? 'bg-red-950 text-red-400 border-red-700/80' : 'bg-emerald-950 text-emerald-400 border-emerald-700/80'
                         }`}>
-                          {result.severity}
+                          {auditResult.severity}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400 mt-0.5">Threat Score: <span className="font-bold text-white">{result.threatScore || 85}/100</span> • Certified by Muhammad Ahmad Shahid</p>
+                      <p className="text-[11px] text-slate-400">Risk Score: <span className="text-white font-extrabold">{auditResult.threatScore || 85}/100</span></p>
                     </div>
                   </div>
-
                   <button 
-                    onClick={downloadDossier}
-                    className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
+                    onClick={exportMarkdownDossier}
+                    className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border border-slate-700 shadow-md"
                   >
-                    <Download className="w-3.5 h-3.5" />
-                    Export Dossier (.md)
+                    <Download className="w-3.5 h-3.5 text-cyan-400" /> Export Report
                   </button>
                 </div>
 
-                {/* Dossier Tabs */}
-                <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
+                {/* Tabs */}
+                <div className="flex flex-wrap gap-1.5 sm:gap-2 border-b border-slate-800 pb-3">
                   <button
                     onClick={() => setActiveTab('overview')}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'overview'
-                        ? 'bg-cyan-500 text-black shadow-md'
-                        : 'text-slate-400 hover:text-white bg-slate-800/40'
+                      activeTab === 'overview' ? 'bg-cyan-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-white bg-slate-800/60'
                     }`}
                   >
-                    1. Executive Diagnosis
+                    1. Mistake
                   </button>
                   <button
                     onClick={() => setActiveTab('vectors')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      activeTab === 'vectors'
-                        ? 'bg-cyan-500 text-black shadow-md'
-                        : 'text-slate-400 hover:text-white bg-slate-800/40'
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      activeTab === 'vectors' ? 'bg-cyan-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-white bg-slate-800/60'
                     }`}
                   >
-                    2. Attack Vectors
-                    <span className="text-[10px] bg-slate-900/60 px-1.5 py-0.2 rounded-md font-bold">
-                      {result.attackVectors?.length || 1}
-                    </span>
+                    2. Vectors
                   </button>
                   <button
                     onClick={() => setActiveTab('remediation')}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'remediation'
-                        ? 'bg-cyan-500 text-black shadow-md'
-                        : 'text-slate-400 hover:text-white bg-slate-800/40'
+                      activeTab === 'remediation' ? 'bg-cyan-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-white bg-slate-800/60'
                     }`}
                   >
-                    3. Aise Theek Karein
+                    3. Fix Guide
                   </button>
                   <button
                     onClick={() => setActiveTab('patch')}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'patch'
-                        ? 'bg-cyan-500 text-black shadow-md'
-                        : 'text-slate-400 hover:text-white bg-slate-800/40'
+                      activeTab === 'patch' ? 'bg-cyan-500 text-slate-950 shadow-md font-black' : 'text-slate-400 hover:text-white bg-slate-800/60'
                     }`}
                   >
-                    4. Hardened Patch
+                    4. Error Free Code
                   </button>
                 </div>
 
-                {/* Tab 1: Executive Diagnosis */}
                 {activeTab === 'overview' && (
                   <div className="space-y-4">
-                    <div className="bg-slate-950/80 p-5 rounded-2xl border border-slate-800">
-                      <div className="text-cyan-400 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-cyan-400" />
-                        <span>Direct Diagnosis (Yeh Error Hai Code Mein):</span>
-                      </div>
-                      <p className="text-slate-200 text-sm leading-relaxed">{result.summary}</p>
+                    <div className="bg-[#020305] p-4 sm:p-5 rounded-2xl border border-red-950 text-xs text-slate-200 leading-relaxed space-y-2 shadow-inner">
+                      <p className="font-extrabold text-red-400 uppercase text-[10px] tracking-widest flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-red-400" /> Yeh Galti Thi Code Mein:
+                      </p>
+                      <p className="text-slate-100 font-medium leading-relaxed text-xs sm:text-sm">{auditResult.exactMistakeFound || auditResult.summary}</p>
                     </div>
 
-                    <div className="bg-slate-950/80 p-5 rounded-2xl border border-slate-800">
-                      <div className="text-indigo-400 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
-                        <Cpu className="w-4 h-4 text-indigo-400" />
-                        <span>Root Cause Analysis (RCA):</span>
-                      </div>
-                      <p className="text-slate-300 text-xs leading-relaxed">{result.rootCauseAnalysis}</p>
-                    </div>
-
-                    {/* Detected Bugs & Vulnerabilities Snapshot */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 bg-slate-950/80 rounded-2xl border border-red-900/30">
-                        <h4 className="text-xs font-bold text-red-400 mb-2 uppercase tracking-wider flex items-center gap-1.5">
-                          <AlertTriangle className="w-3.5 h-3.5" /> Bugs & Runtime Faults
-                        </h4>
-                        <ul className="list-disc pl-4 text-xs space-y-1.5 text-slate-300">
-                          {result.bugs?.map((b: string, i: number) => <li key={i}>{b}</li>)}
-                        </ul>
-                      </div>
-                      <div className="p-4 bg-slate-950/80 rounded-2xl border border-yellow-900/30">
-                        <h4 className="text-xs font-bold text-yellow-400 mb-2 uppercase tracking-wider flex items-center gap-1.5">
-                          <FileText className="w-3.5 h-3.5" /> Security Vulnerabilities
-                        </h4>
-                        <ul className="list-disc pl-4 text-xs space-y-1.5 text-slate-300">
-                          {result.vulnerabilities?.map((v: string, i: number) => <li key={i}>{v}</li>)}
-                        </ul>
-                      </div>
+                    <div className="bg-[#020305] p-4 sm:p-5 rounded-2xl border border-slate-800 text-xs text-slate-300 leading-relaxed space-y-2">
+                      <p className="font-extrabold text-cyan-400 uppercase text-[10px] tracking-widest">Executive Summary:</p>
+                      <p>{auditResult.summary}</p>
                     </div>
                   </div>
                 )}
 
-                {/* Tab 2: Attack Vectors & Exploit Simulations */}
                 {activeTab === 'vectors' && (
-                  <div className="space-y-4">
-                    <p className="text-xs text-slate-400">
-                      Simulated adversarial exploit scenarios synthesized during the Deep Research investigation:
-                    </p>
-                    {result.attackVectors?.map((vec: any, idx: number) => (
-                      <div key={idx} className="bg-slate-950/90 p-5 rounded-2xl border border-red-900/40 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-sm font-bold text-red-300 flex items-center gap-2">
-                            <Crosshair className="w-4 h-4 text-red-400" />
-                            {vec.name}
-                          </h4>
-                          <span className="text-[10px] uppercase font-bold text-red-400 bg-red-950 px-2 py-0.5 rounded-full border border-red-800/60">
-                            High Impact
-                          </span>
-                        </div>
-                        <div className="text-xs text-slate-300">
-                          <span className="font-semibold text-slate-400">Potential Impact: </span>
-                          {vec.impact}
-                        </div>
-                        <div className="p-3.5 bg-black/60 rounded-xl border border-slate-800 text-xs font-mono text-amber-200/90 leading-relaxed">
-                          <span className="font-bold text-slate-400 block mb-1 font-sans">Exploit Vector Scenario:</span>
-                          {vec.scenario}
-                        </div>
+                  <div className="space-y-3">
+                    {auditResult.attackVectors?.map((vec: any, idx: number) => (
+                      <div key={idx} className="bg-[#020305] p-4 rounded-2xl border border-red-950/70 space-y-2 text-xs shadow-sm">
+                        <p className="font-extrabold text-red-300 text-xs sm:text-sm">{vec.name}</p>
+                        <p className="text-slate-300"><span className="text-slate-500 font-bold uppercase text-[10px]">Impact:</span> {vec.impact}</p>
+                        <p className="font-mono text-amber-200/90 bg-black/70 p-3 rounded-xl border border-slate-800 leading-relaxed">{vec.scenario}</p>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* Tab 3: Remediation Blueprint ("Aise Theek Karein") */}
                 {activeTab === 'remediation' && (
-                  <div className="space-y-4">
-                    <div className="bg-gradient-to-br from-emerald-950/40 to-slate-950 p-5 rounded-2xl border border-emerald-800/40">
-                      <div className="text-emerald-400 text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        <span>Actionable Fix Roadmap (Aise Theek Karein):</span>
-                      </div>
-                      <ul className="space-y-3 text-xs text-slate-200">
-                        {result.howToFix?.map((step: string, i: number) => (
-                          <li key={i} className="flex items-start gap-3">
-                            <span className="shrink-0 w-6 h-6 rounded-full bg-emerald-900/80 text-emerald-300 font-bold flex items-center justify-center text-xs border border-emerald-700/60 mt-0.5">
-                              {i + 1}
-                            </span>
-                            <span className="leading-relaxed pt-0.5">{step}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {result.complianceImpact && result.complianceImpact.length > 0 && (
-                      <div className="p-5 bg-slate-950/80 rounded-2xl border border-slate-800">
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">
-                          Regulatory & Compliance Impact
-                        </h4>
-                        <div className="flex flex-wrap gap-2">
-                          {result.complianceImpact.map((comp: string, i: number) => (
-                            <span key={i} className="text-xs px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-300">
-                              {comp}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                  <div className="bg-[#020305] p-5 rounded-2xl border border-slate-800 text-xs text-slate-200 space-y-3">
+                    <p className="font-extrabold text-emerald-400 uppercase text-[10px] tracking-widest">Remediation Guide (Step-by-Step Fixes):</p>
+                    <ul className="space-y-2.5">
+                      {auditResult.howToFix?.map((step: string, i: number) => (
+                        <li key={i} className="flex items-start gap-2.5">
+                          <span className="w-4 h-4 rounded-full bg-emerald-950 text-emerald-400 font-bold flex items-center justify-center text-[10px] border border-emerald-800 shrink-0 mt-0.5">
+                            {i + 1}
+                          </span>
+                          <span className="leading-relaxed font-medium">{step}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 
-                {/* Tab 4: Hardened Production Patch */}
                 {activeTab === 'patch' && (
-                  <div className="space-y-3">
+                  <div className="bg-[#020305] p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-3 shadow-inner">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                        Zero-Trust Drop-in Production Patch
-                      </span>
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-cyan-400">Error Free Code (Yeh Error Free Code Hai)</span>
                       <button 
-                        onClick={handleCopyCode}
-                        className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 transition-colors cursor-pointer"
+                        onClick={copyRefactoredCode}
+                        className="text-xs text-slate-200 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700 shadow-sm font-bold"
                       >
-                        {copied ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />
-                            <span className="text-emerald-400">Copied to Clipboard!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3.5 h-3.5 text-cyan-400" />
-                            <span>Copy Hardened Code</span>
-                          </>
-                        )}
+                        {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-400" />}
+                        <span>{isCopied ? 'Copied' : 'Copy'}</span>
                       </button>
                     </div>
-
-                    <pre className="text-xs font-mono overflow-auto max-h-[460px] text-emerald-300 bg-slate-950 p-5 rounded-2xl border border-slate-800 leading-relaxed shadow-inner">
-                      {result.fixedCode}
+                    <pre className="text-xs font-mono overflow-auto max-h-[350px] text-emerald-300 bg-slate-950 p-4 rounded-xl border border-slate-900 leading-relaxed shadow-inner">
+                      {auditResult.fixedCode}
                     </pre>
                   </div>
                 )}
-              </motion.div>
+              </div>
             )}
           </div>
         </div>
